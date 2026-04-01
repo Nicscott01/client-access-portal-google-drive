@@ -37,7 +37,7 @@ class DriveService {
 		$query = add_query_arg(
 			array(
 				'q'                 => sprintf( "'%s' in parents and trashed = false", $folder_id ),
-				'fields'            => 'files(id,name,mimeType,size,modifiedTime,webViewLink,iconLink,parents)',
+				'fields'            => 'files(id,name,mimeType,size,modifiedTime,webViewLink,iconLink,thumbnailLink,parents,description)',
 				'orderBy'           => 'folder,name',
 				'supportsAllDrives' => 'true',
 				'includeItemsFromAllDrives' => 'true',
@@ -57,7 +57,7 @@ class DriveService {
 	public function get_file( string $file_id ) {
 		$url = add_query_arg(
 			array(
-				'fields' => 'id,name,mimeType,size,modifiedTime,webViewLink,iconLink,parents',
+				'fields' => 'id,name,mimeType,size,modifiedTime,webViewLink,iconLink,thumbnailLink,parents,description',
 				'supportsAllDrives' => 'true',
 			),
 			'https://www.googleapis.com/drive/v3/files/' . rawurlencode( $file_id )
@@ -78,7 +78,7 @@ class DriveService {
 		return $this->request_raw( 'GET', $url );
 	}
 
-	public function upload_file( string $parent_id, array $upload ) {
+	public function upload_file( string $parent_id, array $upload, string $note = '' ) {
 		if ( empty( $upload['tmp_name'] ) || ! file_exists( $upload['tmp_name'] ) ) {
 			return new \WP_Error(
 				'client_access_portal_google_drive_missing_upload_tmp',
@@ -101,6 +101,7 @@ class DriveService {
 			array(
 				'name'    => sanitize_file_name( $upload['name'] ),
 				'parents' => array( $parent_id ),
+				'description' => $note,
 			)
 		);
 
@@ -114,13 +115,38 @@ class DriveService {
 
 		return $this->request(
 			'POST',
-			'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,mimeType,size,modifiedTime,webViewLink,parents',
+			'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,mimeType,size,modifiedTime,webViewLink,iconLink,thumbnailLink,parents,description',
 			array(
 				'headers' => array(
 					'Content-Type' => 'multipart/related; boundary=' . $boundary,
 				),
 				'body'    => $body,
 				'timeout' => 60,
+			)
+		);
+	}
+
+	public function update_file_description( string $file_id, string $description ) {
+		$url = add_query_arg(
+			array(
+				'supportsAllDrives' => 'true',
+				'fields'            => 'id,name,mimeType,size,modifiedTime,webViewLink,iconLink,thumbnailLink,parents,description',
+			),
+			'https://www.googleapis.com/drive/v3/files/' . rawurlencode( $file_id )
+		);
+
+		return $this->request(
+			'PATCH',
+			$url,
+			array(
+				'headers' => array(
+					'Content-Type' => 'application/json; charset=UTF-8',
+				),
+				'body'    => wp_json_encode(
+					array(
+						'description' => $description,
+					)
+				),
 			)
 		);
 	}
