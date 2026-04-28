@@ -1,0 +1,23 @@
+{
+  "name": "nicscott01/client-access-portal-google-drive",
+  "description": "Google Drive storage provider addon for Client Access Portal.",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "authors": [
+    {
+      "name": "Nic Scott"
+    }
+  ],
+  "require": {
+    "php": ">=8.0",
+    "nicscott01/client-access-portal": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "ClientAccessPortalGoogleDrive\\": "src/"
+    }
+  },
+  "extra": {
+    "installer-name": "client-access-portal-google-drive"
+  }
+}
