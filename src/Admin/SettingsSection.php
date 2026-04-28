@@ -29,9 +29,12 @@ class SettingsSection {
 
 	public function sanitize( array $settings ): array {
 		$defaults = $this->defaults();
+		$saved    = get_option( 'client_access_portal_google_drive_settings', array() );
 
 		return array(
-			'credentials_path'          => sanitize_text_field( $settings['credentials_path'] ?? $defaults['credentials_path'] ),
+			'credentials_path'          => $this->credentials_path_is_locked()
+				? sanitize_text_field( is_array( $saved ) ? ( $saved['credentials_path'] ?? $defaults['credentials_path'] ) : $defaults['credentials_path'] )
+				: sanitize_text_field( $settings['credentials_path'] ?? $defaults['credentials_path'] ),
 			'master_folder_id'          => sanitize_text_field( $settings['master_folder_id'] ?? $defaults['master_folder_id'] ),
 			'review_folder_name'        => sanitize_text_field( $settings['review_folder_name'] ?? $defaults['review_folder_name'] ),
 			'sync_interval_minutes'     => absint( $settings['sync_interval_minutes'] ?? $defaults['sync_interval_minutes'] ),
@@ -42,8 +45,9 @@ class SettingsSection {
 	}
 
 	public function render(): void {
-		$settings = $this->settings_helper->all();
-		$health   = $this->settings_helper->health_summary();
+		$settings                = $this->settings_helper->all();
+		$health                  = $this->settings_helper->health_summary();
+		$credentials_path_locked = $this->credentials_path_is_locked();
 		?>
 		<h2><?php esc_html_e( 'Google Drive Provider', 'client-access-portal-google-drive' ); ?></h2>
 		<div class="notice notice-info inline">
@@ -118,8 +122,12 @@ class SettingsSection {
 			<tr>
 				<th scope="row"><label for="cap-gd-credentials-path"><?php esc_html_e( 'Credentials path', 'client-access-portal-google-drive' ); ?></label></th>
 				<td>
-					<input id="cap-gd-credentials-path" name="client_access_portal_google_drive_settings[credentials_path]" type="text" class="regular-text" value="<?php echo esc_attr( $settings['credentials_path'] ); ?>">
-					<p class="description"><?php esc_html_e( 'Recommended: define the JSON key path outside the web root. You can also override this with the `CLIENT_ACCESS_PORTAL_GOOGLE_DRIVE_CREDENTIALS_PATH` constant for environment-specific setups.', 'client-access-portal-google-drive' ); ?></p>
+					<input id="cap-gd-credentials-path" name="client_access_portal_google_drive_settings[credentials_path]" type="text" class="regular-text" value="<?php echo esc_attr( $settings['credentials_path'] ); ?>" <?php disabled( $credentials_path_locked ); ?>>
+					<?php if ( $credentials_path_locked ) : ?>
+						<p class="description"><?php esc_html_e( 'This value is loaded from the CLIENT_ACCESS_PORTAL_GOOGLE_DRIVE_CREDENTIALS_PATH constant and cannot be edited here.', 'client-access-portal-google-drive' ); ?></p>
+					<?php else : ?>
+						<p class="description"><?php esc_html_e( 'Recommended: define the JSON key path outside the web root. You can also override this with the CLIENT_ACCESS_PORTAL_GOOGLE_DRIVE_CREDENTIALS_PATH constant for environment-specific setups.', 'client-access-portal-google-drive' ); ?></p>
+					<?php endif; ?>
 				</td>
 			</tr>
 			<tr>
@@ -153,5 +161,9 @@ class SettingsSection {
 
 	private function defaults(): array {
 		return $this->settings_helper->defaults();
+	}
+
+	private function credentials_path_is_locked(): bool {
+		return defined( 'CLIENT_ACCESS_PORTAL_GOOGLE_DRIVE_CREDENTIALS_PATH' ) && CLIENT_ACCESS_PORTAL_GOOGLE_DRIVE_CREDENTIALS_PATH;
 	}
 }
