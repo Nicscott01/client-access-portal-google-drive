@@ -52,7 +52,7 @@ Inside that service account:
 
 - open the `Keys` tab
 - click `Add key > Create new key`
-- choose `JSON`
+- choose `JSON` 
 - download the file
 
 This downloaded JSON file is the credential the plugin needs.

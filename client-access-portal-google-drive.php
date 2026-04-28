@@ -31,4 +31,7 @@ function client_access_portal_google_drive(): ClientAccessPortalGoogleDrive\Plug
 	return $plugin;
 }
 
+register_activation_hook( __FILE__, array( client_access_portal_google_drive(), 'activate' ) );
+register_deactivation_hook( __FILE__, array( client_access_portal_google_drive(), 'deactivate' ) );
+
 client_access_portal_google_drive()->boot();

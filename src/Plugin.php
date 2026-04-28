@@ -10,11 +10,14 @@ use ClientAccessPortalGoogleDrive\Admin\TestConnectionAction;
 use ClientAccessPortalGoogleDrive\Providers\GoogleDriveProvider;
 use ClientAccessPortalGoogleDrive\Service\ConnectionTester;
 use ClientAccessPortalGoogleDrive\Service\DriveService;
+use ClientAccessPortalGoogleDrive\Service\FileSyncService;
 use ClientAccessPortalGoogleDrive\Service\ServiceAccountAuth;
 use ClientAccessPortalGoogleDrive\Support\CoreBridge;
 use ClientAccessPortalGoogleDrive\Support\Settings;
 
 class Plugin {
+	private const SYNC_HOOK = 'client_access_portal_google_drive_sync_visible_files';
+
 	private CoreBridge $core_bridge;
 
 	private Settings $settings;
@@ -30,6 +33,8 @@ class Plugin {
 	private ServiceAccountAuth $service_account_auth;
 
 	private ClientDriveTools $client_drive_tools;
+
+	private FileSyncService $file_sync_service;
 
 	public function __construct() {
 		$this->core_bridge      = new CoreBridge();
@@ -49,6 +54,7 @@ class Plugin {
 			$this->drive_service,
 			$this->notice_service
 		);
+		$this->file_sync_service = new FileSyncService( $this->core_bridge, $this->settings, $this->drive_service );
 	}
 
 	public function boot(): void {
@@ -61,6 +67,18 @@ class Plugin {
 		add_action( 'plugins_loaded', array( $this, 'maybe_show_dependency_notice' ), 5 );
 		add_action( 'client_access_portal_after_client_created', array( $this, 'maybe_provision_client' ), 10, 3 );
 		add_action( 'client_access_portal_after_client_updated', array( $this, 'maybe_provision_client_after_update' ), 10, 3 );
+		add_filter( 'cron_schedules', array( $this, 'register_sync_schedule' ) );
+		add_action( 'init', array( $this, 'ensure_sync_event' ) );
+		add_action( self::SYNC_HOOK, array( $this->file_sync_service, 'sync_visible_files' ) );
+		add_action( 'update_option_client_access_portal_google_drive_settings', array( $this, 'reschedule_sync_event' ), 10, 2 );
+	}
+
+	public function activate(): void {
+		$this->schedule_sync_event();
+	}
+
+	public function deactivate(): void {
+		wp_clear_scheduled_hook( self::SYNC_HOOK );
 	}
 
 	public function register_provider( ProviderRegistry $registry ): void {
@@ -170,5 +188,42 @@ class Plugin {
 				$client['client_name']
 			)
 		);
+	}
+
+	public function register_sync_schedule( array $schedules ): array {
+		$interval = max( 1, (int) $this->settings->all()['sync_interval_minutes'] ) * MINUTE_IN_SECONDS;
+
+		$schedules['client_access_portal_google_drive_sync'] = array(
+			'interval' => $interval,
+			'display'  => sprintf(
+				/* translators: %d: interval in minutes */
+				__( 'Client Access Portal Google Drive Sync (%d minutes)', 'client-access-portal-google-drive' ),
+				(int) ( $interval / MINUTE_IN_SECONDS )
+			),
+		);
+
+		return $schedules;
+	}
+
+	public function ensure_sync_event(): void {
+		if ( false === wp_next_scheduled( self::SYNC_HOOK ) ) {
+			$this->schedule_sync_event();
+		}
+	}
+
+	public function reschedule_sync_event( $old_value, $value ): void {
+		$old_interval = max( 1, (int) ( $old_value['sync_interval_minutes'] ?? $this->settings->defaults()['sync_interval_minutes'] ) );
+		$new_interval = max( 1, (int) ( $value['sync_interval_minutes'] ?? $this->settings->defaults()['sync_interval_minutes'] ) );
+
+		if ( $old_interval === $new_interval ) {
+			return;
+		}
+
+		wp_clear_scheduled_hook( self::SYNC_HOOK );
+		$this->schedule_sync_event();
+	}
+
+	private function schedule_sync_event(): void {
+		wp_schedule_event( time() + MINUTE_IN_SECONDS, 'client_access_portal_google_drive_sync', self::SYNC_HOOK );
 	}
 }

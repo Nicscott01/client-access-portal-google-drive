@@ -135,24 +135,10 @@ class SettingsSection {
 			</tr>
 			<tr>
 				<th scope="row"><label for="cap-gd-sync-interval"><?php esc_html_e( 'Sync interval (minutes)', 'client-access-portal-google-drive' ); ?></label></th>
-				<td><input id="cap-gd-sync-interval" name="client_access_portal_google_drive_settings[sync_interval_minutes]" type="number" min="1" class="small-text" value="<?php echo esc_attr( (string) $settings['sync_interval_minutes'] ); ?>"></td>
-			</tr>
-			<tr>
-				<th scope="row"><label for="cap-gd-alert-email"><?php esc_html_e( 'Alert email', 'client-access-portal-google-drive' ); ?></label></th>
-				<td><input id="cap-gd-alert-email" name="client_access_portal_google_drive_settings[alert_email]" type="email" class="regular-text" value="<?php echo esc_attr( $settings['alert_email'] ); ?>"></td>
-			</tr>
-			<tr>
-				<th scope="row"><?php esc_html_e( 'Client upload notifications', 'client-access-portal-google-drive' ); ?></th>
 				<td>
-					<label for="cap-gd-notify-upload">
-						<input id="cap-gd-notify-upload" name="client_access_portal_google_drive_settings[notify_on_client_upload]" type="checkbox" value="1" <?php checked( ! empty( $settings['notify_on_client_upload'] ) ); ?>>
-						<?php esc_html_e( 'Notify staff when a client upload reaches the review folder.', 'client-access-portal-google-drive' ); ?>
-					</label>
+					<input id="cap-gd-sync-interval" name="client_access_portal_google_drive_settings[sync_interval_minutes]" type="number" min="1" class="small-text" value="<?php echo esc_attr( (string) $settings['sync_interval_minutes'] ); ?>">
+					<p class="description"><?php esc_html_e( 'This drives staff-to-client file detection scans. Email template and recipient settings now live in the core File Notifications section.', 'client-access-portal-google-drive' ); ?></p>
 				</td>
-			</tr>
-			<tr>
-				<th scope="row"><label for="cap-gd-notification-recipient"><?php esc_html_e( 'Notification recipient', 'client-access-portal-google-drive' ); ?></label></th>
-				<td><input id="cap-gd-notification-recipient" name="client_access_portal_google_drive_settings[notification_recipient]" type="email" class="regular-text" value="<?php echo esc_attr( $settings['notification_recipient'] ); ?>"></td>
 			</tr>
 		</table>
 		<h3><?php esc_html_e( 'Connection Test', 'client-access-portal-google-drive' ); ?></h3>
