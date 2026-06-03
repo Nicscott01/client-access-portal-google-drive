@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Client Access Portal - Google Drive
  * Description: Google Drive storage provider addon for Client Access Portal.
- * Version: 0.1.2
+ * Version: 0.1.3
  * Author: Nic Scott
  * Text Domain: client-access-portal-google-drive
  * Requires at least: 6.0
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'CLIENT_ACCESS_PORTAL_GOOGLE_DRIVE_VERSION', '0.1.2' );
+define( 'CLIENT_ACCESS_PORTAL_GOOGLE_DRIVE_VERSION', '0.1.3' );
 define( 'CLIENT_ACCESS_PORTAL_GOOGLE_DRIVE_PLUGIN_FILE', __FILE__ );
 define( 'CLIENT_ACCESS_PORTAL_GOOGLE_DRIVE_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 

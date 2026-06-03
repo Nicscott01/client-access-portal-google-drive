@@ -18,7 +18,7 @@ This addon registers a `google-drive` provider, provisions client folders in Dri
   - a root client folder
   - a review/uploads folder
 - Lists approved files in the frontend portal
-- Sends client uploads into the review folder, using Google Drive resumable uploads for larger files
+- Sends client uploads into the review folder, including direct browser-to-Google uploads for larger files
 - Supports file-note persistence and editing
 - Adds Google Drive-specific settings and connection testing to the core settings screen
 - Adds client-level Drive provisioning/recovery tools
@@ -67,9 +67,15 @@ High-level flow:
 
 - Shared Drives are the safest default for uploads and folder ownership behavior.
 - The addon detects the active core plugin by runtime constants, so either the release folder or a `-dev` folder can satisfy the dependency as long as only one core build is active.
-- Larger uploads are transferred to Google Drive through resumable upload sessions so PHP does not need to build one full multipart request body in memory.
+- Larger browser uploads use Google Drive resumable upload sessions so the file body can transfer directly from the browser to Google Drive.
+- Server-side uploads still use Google Drive resumable upload sessions so PHP does not need to build one full multipart request body in memory.
 
 ## Changelog
+
+### 0.1.3
+
+- Added direct browser-to-Google Drive upload session support for larger portal uploads.
+- Added finalization checks that verify the completed Drive file belongs to the client's review folder and matches the selected file metadata.
 
 ### 0.1.2
 

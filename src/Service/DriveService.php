@@ -132,6 +132,63 @@ class DriveService {
 		);
 	}
 
+	public function create_resumable_upload_session( string $parent_id, array $file, string $note = '' ) {
+		$token = $this->auth->get_access_token();
+
+		if ( is_wp_error( $token ) ) {
+			return $token;
+		}
+
+		$file_name = sanitize_file_name( (string) ( $file['name'] ?? '' ) );
+		$file_type = ! empty( $file['type'] ) ? (string) $file['type'] : 'application/octet-stream';
+		$file_size = isset( $file['size'] ) ? (int) $file['size'] : 0;
+
+		if ( '' === $file_name || $file_size <= 0 ) {
+			return new \WP_Error(
+				'client_access_portal_google_drive_direct_upload_invalid_file',
+				__( 'Cannot start a Google Drive upload session without a valid file name and size.', 'client-access-portal-google-drive' )
+			);
+		}
+
+		$metadata = wp_json_encode(
+			array(
+				'name'        => $file_name,
+				'parents'     => array( $parent_id ),
+				'description' => $note,
+			)
+		);
+
+		$session_response = wp_remote_request(
+			'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true&fields=id,name,mimeType,size,modifiedTime,webViewLink,iconLink,thumbnailLink,parents,description',
+			array(
+				'method'  => 'POST',
+				'timeout' => 20,
+				'headers' => array(
+					'Authorization'           => 'Bearer ' . $token,
+					'Content-Type'            => 'application/json; charset=UTF-8',
+					'X-Upload-Content-Type'   => $file_type,
+					'X-Upload-Content-Length' => (string) $file_size,
+				),
+				'body'    => $metadata,
+			)
+		);
+
+		if ( is_wp_error( $session_response ) ) {
+			return $session_response;
+		}
+
+		$session_status = wp_remote_retrieve_response_code( $session_response );
+		$session_url    = wp_remote_retrieve_header( $session_response, 'location' );
+
+		if ( $session_status < 200 || $session_status >= 300 || '' === $session_url ) {
+			return $this->google_upload_error( $session_response, __( 'Google Drive could not start a resumable upload session.', 'client-access-portal-google-drive' ) );
+		}
+
+		return array(
+			'upload_url' => $session_url,
+		);
+	}
+
 	private function upload_file_resumable( string $parent_id, array $upload, string $note, int $file_size ) {
 		$token = $this->auth->get_access_token();
 

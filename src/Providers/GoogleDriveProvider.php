@@ -31,6 +31,7 @@ class GoogleDriveProvider implements StorageProvider {
 			'metadata_sync'              => true,
 			'stream_file'                => true,
 			'upload_for_review'          => true,
+			'direct_upload_for_review'   => true,
 			'external_view_link'         => true,
 		);
 	}
@@ -160,6 +161,80 @@ class GoogleDriveProvider implements StorageProvider {
 
 		if ( is_wp_error( $item ) ) {
 			return $item;
+		}
+
+		return $this->map_item( $item );
+	}
+
+	public function create_direct_upload_session( array $client_data, array $file, string $note = '' ): mixed {
+		$link_map         = $client_data['provider_links'] ?? array();
+		$review_folder_id = $link_map['review_folder']['external_id'] ?? '';
+
+		if ( empty( $review_folder_id ) ) {
+			return new \WP_Error(
+				'client_access_portal_google_drive_missing_review_link',
+				__( 'This client does not have a Google Drive review folder linked yet.', 'client-access-portal-google-drive' )
+			);
+		}
+
+		return $this->drive_service->create_resumable_upload_session( $review_folder_id, $file, $note );
+	}
+
+	public function finalize_direct_upload_session( array $client_data, string $file_id, array $state ): mixed {
+		$link_map         = $client_data['provider_links'] ?? array();
+		$review_folder_id = $link_map['review_folder']['external_id'] ?? '';
+
+		if ( empty( $review_folder_id ) ) {
+			return new \WP_Error(
+				'client_access_portal_google_drive_missing_review_link',
+				__( 'This client does not have a Google Drive review folder linked yet.', 'client-access-portal-google-drive' )
+			);
+		}
+
+		if ( '' === trim( $file_id ) ) {
+			return new \WP_Error(
+				'client_access_portal_google_drive_missing_file_id',
+				__( 'A file ID is required before the upload can be finalized.', 'client-access-portal-google-drive' ),
+				array( 'status' => 422 )
+			);
+		}
+
+		$item = $this->drive_service->get_file( $file_id );
+
+		if ( is_wp_error( $item ) ) {
+			return $item;
+		}
+
+		$parents = isset( $item['parents'] ) && is_array( $item['parents'] ) ? $item['parents'] : array();
+
+		if ( ! in_array( $review_folder_id, $parents, true ) ) {
+			return new \WP_Error(
+				'client_access_portal_google_drive_file_out_of_scope',
+				__( 'The uploaded file was not created in this client review folder.', 'client-access-portal-google-drive' ),
+				array( 'status' => 403 )
+			);
+		}
+
+		$expected_size = isset( $state['file_size'] ) ? (int) $state['file_size'] : 0;
+		$actual_size   = isset( $item['size'] ) ? (int) $item['size'] : 0;
+
+		if ( $expected_size > 0 && $actual_size > 0 && $expected_size !== $actual_size ) {
+			return new \WP_Error(
+				'client_access_portal_google_drive_direct_upload_size_mismatch',
+				__( 'The uploaded Google Drive file size did not match the selected file.', 'client-access-portal-google-drive' ),
+				array( 'status' => 422 )
+			);
+		}
+
+		$expected_name = isset( $state['file_name'] ) ? sanitize_file_name( (string) $state['file_name'] ) : '';
+		$actual_name   = isset( $item['name'] ) ? sanitize_file_name( (string) $item['name'] ) : '';
+
+		if ( '' !== $expected_name && '' !== $actual_name && $expected_name !== $actual_name ) {
+			return new \WP_Error(
+				'client_access_portal_google_drive_direct_upload_name_mismatch',
+				__( 'The uploaded Google Drive file name did not match the selected file.', 'client-access-portal-google-drive' ),
+				array( 'status' => 422 )
+			);
 		}
 
 		return $this->map_item( $item );
