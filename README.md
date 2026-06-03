@@ -72,6 +72,10 @@ High-level flow:
 
 ## Changelog
 
+### 0.1.4
+
+- Added a Drive lookup fallback so direct uploads can be finalized when the browser cannot read Google's successful upload response.
+
 ### 0.1.3
 
 - Added direct browser-to-Google Drive upload session support for larger portal uploads.

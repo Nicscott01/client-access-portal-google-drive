@@ -191,15 +191,9 @@ class GoogleDriveProvider implements StorageProvider {
 			);
 		}
 
-		if ( '' === trim( $file_id ) ) {
-			return new \WP_Error(
-				'client_access_portal_google_drive_missing_file_id',
-				__( 'A file ID is required before the upload can be finalized.', 'client-access-portal-google-drive' ),
-				array( 'status' => 422 )
-			);
-		}
-
-		$item = $this->drive_service->get_file( $file_id );
+		$item = '' !== trim( $file_id )
+			? $this->drive_service->get_file( $file_id )
+			: $this->find_recent_direct_upload( $review_folder_id, $state );
 
 		if ( is_wp_error( $item ) ) {
 			return $item;
@@ -238,6 +232,52 @@ class GoogleDriveProvider implements StorageProvider {
 		}
 
 		return $this->map_item( $item );
+	}
+
+	private function find_recent_direct_upload( string $review_folder_id, array $state ): mixed {
+		$expected_name = isset( $state['file_name'] ) ? sanitize_file_name( (string) $state['file_name'] ) : '';
+		$expected_size = isset( $state['file_size'] ) ? (int) $state['file_size'] : 0;
+
+		if ( '' === $expected_name || $expected_size <= 0 ) {
+			return new \WP_Error(
+				'client_access_portal_google_drive_direct_upload_unresolved',
+				__( 'The completed Google Drive upload could not be matched to the selected file yet.', 'client-access-portal-google-drive' ),
+				array( 'status' => 409 )
+			);
+		}
+
+		$items = $this->drive_service->list_children( $review_folder_id );
+
+		if ( is_wp_error( $items ) ) {
+			return $items;
+		}
+
+		$matches = array_filter(
+			$items,
+			static function ( array $item ) use ( $expected_name, $expected_size ): bool {
+				$item_name = isset( $item['name'] ) ? sanitize_file_name( (string) $item['name'] ) : '';
+				$item_size = isset( $item['size'] ) ? (int) $item['size'] : 0;
+
+				return $expected_name === $item_name && $expected_size === $item_size;
+			}
+		);
+
+		if ( empty( $matches ) ) {
+			return new \WP_Error(
+				'client_access_portal_google_drive_direct_upload_unresolved',
+				__( 'The completed Google Drive upload is not visible to the portal yet.', 'client-access-portal-google-drive' ),
+				array( 'status' => 409 )
+			);
+		}
+
+		usort(
+			$matches,
+			static function ( array $a, array $b ): int {
+				return strcmp( (string) ( $b['modifiedTime'] ?? '' ), (string) ( $a['modifiedTime'] ?? '' ) );
+			}
+		);
+
+		return reset( $matches );
 	}
 
 	public function update_file_note( array $client_data, string $file_id, string $note ): mixed {
