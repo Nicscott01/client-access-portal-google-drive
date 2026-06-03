@@ -86,6 +86,12 @@ class DriveService {
 			);
 		}
 
+		$file_size = filesize( $upload['tmp_name'] );
+
+		if ( false !== $file_size && $file_size > 8 * MB_IN_BYTES ) {
+			return $this->upload_file_resumable( $parent_id, $upload, $note, (int) $file_size );
+		}
+
 		$file_contents = file_get_contents( $upload['tmp_name'] );
 
 		if ( false === $file_contents ) {
@@ -122,6 +128,148 @@ class DriveService {
 				),
 				'body'    => $body,
 				'timeout' => 60,
+			)
+		);
+	}
+
+	private function upload_file_resumable( string $parent_id, array $upload, string $note, int $file_size ) {
+		$token = $this->auth->get_access_token();
+
+		if ( is_wp_error( $token ) ) {
+			return $token;
+		}
+
+		$mime_type = ! empty( $upload['type'] ) ? $upload['type'] : 'application/octet-stream';
+		$metadata  = wp_json_encode(
+			array(
+				'name'        => sanitize_file_name( $upload['name'] ),
+				'parents'     => array( $parent_id ),
+				'description' => $note,
+			)
+		);
+
+		$session_response = wp_remote_request(
+			'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true&fields=id,name,mimeType,size,modifiedTime,webViewLink,iconLink,thumbnailLink,parents,description',
+			array(
+				'method'  => 'POST',
+				'timeout' => 20,
+				'headers' => array(
+					'Authorization'              => 'Bearer ' . $token,
+					'Content-Type'               => 'application/json; charset=UTF-8',
+					'X-Upload-Content-Type'      => $mime_type,
+					'X-Upload-Content-Length'    => (string) $file_size,
+				),
+				'body'    => $metadata,
+			)
+		);
+
+		if ( is_wp_error( $session_response ) ) {
+			return $session_response;
+		}
+
+		$session_status = wp_remote_retrieve_response_code( $session_response );
+		$session_url    = wp_remote_retrieve_header( $session_response, 'location' );
+
+		if ( $session_status < 200 || $session_status >= 300 || '' === $session_url ) {
+			return $this->google_upload_error( $session_response, __( 'Google Drive could not start a resumable upload session.', 'client-access-portal-google-drive' ) );
+		}
+
+		$handle = fopen( $upload['tmp_name'], 'rb' );
+
+		if ( false === $handle ) {
+			return new \WP_Error(
+				'client_access_portal_google_drive_upload_read_failed',
+				__( 'The uploaded file could not be read before transfer to Google Drive.', 'client-access-portal-google-drive' )
+			);
+		}
+
+		$chunk_size = 8 * MB_IN_BYTES;
+		$offset     = 0;
+		$final_body = array();
+
+		while ( ! feof( $handle ) && $offset < $file_size ) {
+			$chunk = fread( $handle, min( $chunk_size, $file_size - $offset ) );
+
+			if ( false === $chunk ) {
+				fclose( $handle );
+				return new \WP_Error(
+					'client_access_portal_google_drive_upload_read_failed',
+					__( 'The uploaded file could not be read before transfer to Google Drive.', 'client-access-portal-google-drive' )
+				);
+			}
+
+			$chunk_length = strlen( $chunk );
+
+			if ( 0 === $chunk_length ) {
+				fclose( $handle );
+				return new \WP_Error(
+					'client_access_portal_google_drive_upload_read_failed',
+					__( 'The uploaded file could not be read before transfer to Google Drive.', 'client-access-portal-google-drive' )
+				);
+			}
+
+			$range_end    = $offset + $chunk_length - 1;
+			$response     = wp_remote_request(
+				$session_url,
+				array(
+					'method'      => 'PUT',
+					'timeout'     => 60,
+					'redirection' => 0,
+					'headers' => array(
+						'Authorization' => 'Bearer ' . $token,
+						'Content-Type'  => $mime_type,
+						'Content-Length' => (string) $chunk_length,
+						'Content-Range' => sprintf( 'bytes %d-%d/%d', $offset, $range_end, $file_size ),
+					),
+					'body'    => $chunk,
+				)
+			);
+
+			if ( is_wp_error( $response ) ) {
+				fclose( $handle );
+				return $response;
+			}
+
+			$status_code = wp_remote_retrieve_response_code( $response );
+
+			if ( 308 === $status_code ) {
+				$offset += $chunk_length;
+				continue;
+			}
+
+			if ( $status_code < 200 || $status_code >= 300 ) {
+				fclose( $handle );
+				return $this->google_upload_error( $response, __( 'Google Drive rejected an upload chunk.', 'client-access-portal-google-drive' ) );
+			}
+
+			$final_body = json_decode( wp_remote_retrieve_body( $response ), true );
+			$offset    += $chunk_length;
+		}
+
+		fclose( $handle );
+
+		if ( ! is_array( $final_body ) || empty( $final_body['id'] ) ) {
+			return new \WP_Error(
+				'client_access_portal_google_drive_upload_incomplete',
+				__( 'Google Drive did not return a completed upload record.', 'client-access-portal-google-drive' )
+			);
+		}
+
+		return $final_body;
+	}
+
+	private function google_upload_error( $response, string $fallback_message ): \WP_Error {
+		$status_code   = wp_remote_retrieve_response_code( $response );
+		$body          = json_decode( wp_remote_retrieve_body( $response ), true );
+		$error_message = is_array( $body ) && ! empty( $body['error']['message'] ) ? $body['error']['message'] : $fallback_message;
+
+		return new \WP_Error(
+			'client_access_portal_google_drive_api_error',
+			sprintf(
+				/* translators: 1: status code, 2: response message */
+				__( 'Google Drive API returned HTTP %1$d: %2$s', 'client-access-portal-google-drive' ),
+				$status_code,
+				$error_message
 			)
 		);
 	}
